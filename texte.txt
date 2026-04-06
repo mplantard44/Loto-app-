@@ -1,0 +1,160 @@
+
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Loto AI V4</title>
+
+<style>
+body { font-family: Arial; background:#0b1e3c; color:white; text-align:center; }
+button { padding:10px; margin:6px; border-radius:8px; border:none; background:#00c3ff; }
+.grille { margin:8px; font-size:18px; }
+.small { font-size:12px; color:#ccc; }
+</style>
+</head>
+
+<body>
+
+<h1>🤖 Loto AI V4</h1>
+
+<button onclick="loadData()">📡 Charger tirages</button>
+<button onclick="generer()">🎯 Générer</button>
+<button onclick="simuler()">📅 Simuler 10 tirages</button>
+<button onclick="voir()">📂 Historique</button>
+
+<div id="resultat"></div>
+<div class="small" id="stats"></div>
+
+<script>
+
+let tirages = JSON.parse(localStorage.getItem("tirages")) || [];
+let sessions = JSON.parse(localStorage.getItem("sessions")) || [];
+let last = [];
+
+// ====== DATA API (simple publique)
+async function loadData() {
+try {
+let res = await fetch("https://raw.githubusercontent.com/arnaudrenaud/euromillions/main/loto_france.csv");
+let text = await res.text();
+
+tirages = text.split("\n").slice(1,100).map(l=>{
+let p = l.split(",");
+return p.slice(2,7).map(Number);
+});
+
+localStorage.setItem("tirages", JSON.stringify(tirages));
+alert("Tirages mis à jour !");
+} catch(e) {
+alert("Erreur chargement (connexion)");
+}
+}
+
+// ====== ANALYSE ======
+function analyser(){
+let freq={}, retard={};
+
+tirages.forEach((t,i)=>{
+t.forEach(n=>{
+freq[n]=(freq[n]||0)+1;
+retard[n]=tirages.length-i;
+});
+});
+
+let nums = Array.from({length:49},(_,i)=>i+1);
+
+let score = nums.map(n=>({
+n,
+score:(freq[n]||0)*2+(retard[n]||0)
+}));
+
+score.sort((a,b)=>b.score-a.score);
+
+return {
+top: score.slice(0,12).map(x=>x.n),
+low: score.slice(-12).map(x=>x.n)
+};
+}
+
+// ====== GENERATION ======
+function genererGrille(){
+let {top,low} = analyser();
+let g=[];
+
+// stratégie mix
+g.push(...top.sort(()=>0.5-Math.random()).slice(0,2));
+
+while(g.length<4){
+let n=Math.floor(Math.random()*49)+1;
+if(!g.includes(n)) g.push(n);
+}
+
+let l=low[Math.floor(Math.random()*low.length)];
+if(!g.includes(l)) g.push(l);
+
+g.sort((a,b)=>a-b);
+return {g, c:Math.floor(Math.random()*10)+1};
+}
+
+// ====== GENERER ======
+function generer(){
+last=[];
+let html="";
+
+for(let i=0;i<3;i++){
+let x=genererGrille();
+last.push(x);
+html+=`<div class="grille">Grille ${i+1}: ${x.g.join("-")} ⭐ ${x.c}</div>`;
+}
+
+sessions.push(last);
+localStorage.setItem("sessions", JSON.stringify(sessions));
+
+document.getElementById("resultat").innerHTML=html;
+stats();
+}
+
+// ====== SIMULATION ======
+function simuler(){
+let gains=0;
+
+for(let i=0;i<10;i++){
+let tirage=genererGrille().g;
+let test=genererGrille().g;
+
+let match = test.filter(n=>tirage.includes(n)).length;
+
+if(match>=3) gains++;
+}
+
+alert("Simulation: "+gains+" gains sur 10");
+}
+
+// ====== STATS ======
+function stats(){
+let {top,low}=analyser();
+document.getElementById("stats").innerHTML=
+"🔥 "+top.slice(0,5).join(", ")+"<br>❄️ "+low.slice(0,5).join(", ");
+}
+
+// ====== HISTORIQUE ======
+function voir(){
+let html="<h3>Sessions</h3>";
+
+sessions.forEach((s,i)=>{
+html+=`Session ${i+1}<br>`;
+s.forEach(g=>{
+html+=g.g.join("-")+" ⭐ "+g.c+"<br>";
+});
+html+="<br>";
+});
+
+document.getElementById("resultat").innerHTML=html;
+}
+
+stats();
+
+</script>
+
+</body>
+</html>
